@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+<title>Vault — Token Management</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+<style>
+  :root{
+    --bg:#0B0F19;
+    --card:rgba(255,255,255,0.08);
+    --card-border:rgba(255,255,255,0.14);
+    --gold:#FFD700;
+    --glow:#F8E16C;
+    --accent:#4F9DFF;
+    --text:#FFFFFF;
+    --muted:rgba(255,255,255,0.52);
+    --mx:50%;
+    --my:50%;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'SF Pro Display','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  #root{position:relative;min-height:100vh;}
+
+  /* ---------------- Background layers ---------------- */
+  .bg-mesh{
+    position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(600px 500px at 15% 20%, rgba(79,157,255,0.16), transparent 60%),
+      radial-gradient(700px 600px at 85% 15%, rgba(255,215,0,0.10), transparent 60%),
+      radial-gradient(800px 700px at 50% 100%, rgba(79,157,255,0.10), transparent 60%),
+      var(--bg);
+    animation:meshShift 22s ease-in-out infinite alternate;
+  }
+  @keyframes meshShift{
+    0%{filter:hue-rotate(0deg) brightness(1);}
+    50%{filter:hue-rotate(6deg) brightness(1.05);}
+    100%{filter:hue-rotate(-4deg) brightness(0.98);}
+  }
+
+  .orb{
+    position:fixed;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0;opacity:0.55;
+    will-change:transform;
+  }
+  .orb1{width:420px;height:420px;background:radial-gradient(circle, var(--accent), transparent 70%);
+    top:-100px;left:-100px;animation:orbFloat1 26s ease-in-out infinite;}
+  .orb2{width:380px;height:380px;background:radial-gradient(circle, var(--gold), transparent 70%);
+    bottom:-120px;right:-80px;animation:orbFloat2 32s ease-in-out infinite;}
+  .orb3{width:300px;height:300px;background:radial-gradient(circle, var(--glow), transparent 70%);
+    top:40%;right:10%;animation:orbFloat3 28s ease-in-out infinite;opacity:0.35;}
+
+  @keyframes orbFloat1{
+    0%,100%{transform:translate(0,0) scale(1);}
+    50%{transform:translate(80px,60px) scale(1.15);}
+  }
+  @keyframes orbFloat2{
+    0%,100%{transform:translate(0,0) scale(1);}
+    50%{transform:translate(-70px,-50px) scale(1.1);}
+  }
+  @keyframes orbFloat3{
+    0%,100%{transform:translate(0,0) scale(1);}
+    50%{transform:translate(-40px,50px) scale(0.9);}
+  }
+
+  canvas.particles{position:fixed;inset:0;z-index:1;pointer-events:none;}
+  canvas.coin-back{position:fixed;inset:0;z-index:5;pointer-events:none;}
+  canvas.coin-front{position:fixed;inset:0;z-index:50;pointer-events:none;}
+
+  /* ---------------- Layout ---------------- */
+  .app-shell{
+    position:relative;z-index:10;
+    max-width:1180px;
+    margin:0 auto;
+    padding:56px 28px 120px;
+  }
+
+  .app-header{
+    display:flex;flex-direction:column;align-items:center;text-align:center;gap:22px;
+    margin-bottom:44px;
+  }
+  .eyebrow{
+    font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--accent);
+    font-weight:600;
+  }
+  .app-title{
+    font-size:44px;font-weight:700;letter-spacing:-0.02em;margin:0;
+    background:linear-gradient(180deg,#fff 0%, rgba(255,255,255,0.75) 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .app-sub{color:var(--muted);font-size:15px;margin:0;max-width:480px;}
+
+  .totals-row{
+    display:flex;align-items:stretch;gap:14px;flex-wrap:wrap;justify-content:center;
+    margin-top:8px;
+  }
+  .stat-pill{
+    background:var(--card);
+    border:1px solid var(--card-border);
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border-radius:18px;
+    padding:16px 26px;
+    min-width:150px;
+    box-shadow:0 8px 30px rgba(0,0,0,0.35);
+  }
+  .stat-label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);}
+  .stat-value{font-size:26px;font-weight:700;margin-top:4px;letter-spacing:-0.01em;}
+  .stat-value.pulse{animation:statPulse 420ms ease;}
+  @keyframes statPulse{
+    0%{transform:scale(1);text-shadow:0 0 0 rgba(255,215,0,0);}
+    35%{transform:scale(1.12);text-shadow:0 0 18px rgba(255,215,0,0.85);color:var(--gold);}
+    100%{transform:scale(1);text-shadow:0 0 0 rgba(255,215,0,0);}
+  }
+
+  .toolbar{
+    display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;
+    margin-bottom:38px;
+  }
+  .search-wrap{
+    position:relative;
+    display:flex;align-items:center;
+  }
+  .search-input{
+    width:280px;
+    background:var(--card);
+    border:1px solid var(--card-border);
+    border-radius:14px;
+    padding:12px 16px 12px 40px;
+    color:var(--text);
+    font-size:14px;
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    outline:none;
+    transition:border-color .2s ease, box-shadow .2s ease;
+  }
+  .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,157,255,0.18);}
+  .search-icon{position:absolute;left:14px;opacity:0.5;font-size:14px;pointer-events:none;}
+
+  .btn{
+    border:none;cursor:pointer;font-family:inherit;
+    display:inline-flex;align-items:center;gap:8px;
+    border-radius:14px;padding:12px 20px;font-size:14px;font-weight:600;
+    transition:transform .15s ease, box-shadow .2s ease, filter .2s ease;
+  }
+  .btn:active{transform:scale(0.96);}
+  .btn-primary{
+    background:linear-gradient(135deg, var(--gold), #E3B700);
+    color:#1a1400;
+    box-shadow:0 8px 24px rgba(255,215,0,0.28);
+  }
+  .btn-primary:hover{filter:brightness(1.08);box-shadow:0 10px 28px rgba(255,215,0,0.4);}
+
+  /* ---------------- Add panel ---------------- */
+  .add-panel{
+    max-width:420px;margin:0 auto 38px;
+    background:var(--card);
+    border:1px solid var(--card-border);
+    border-radius:20px;
+    padding:22px;
+    backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+    box-shadow:0 20px 50px rgba(0,0,0,0.45);
+    display:flex;flex-direction:column;gap:12px;
+    animation:panelIn .28s cubic-bezier(.2,.9,.3,1.2);
+  }
+  @keyframes panelIn{
+    from{opacity:0;transform:translateY(-10px) scale(0.96);}
+    to{opacity:1;transform:translateY(0) scale(1);}
+  }
+  .add-panel input{
+    background:rgba(255,255,255,0.06);
+    border:1px solid var(--card-border);
+    border-radius:12px;
+    padding:11px 14px;color:var(--text);font-size:14px;outline:none;
+  }
+  .add-panel input:focus{border-color:var(--accent);}
+  .add-panel-row{display:flex;gap:10px;}
+  .add-panel-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:4px;}
+  .btn-ghost{background:rgba(255,255,255,0.06);color:var(--text);}
+  .btn-ghost:hover{background:rgba(255,255,255,0.1);}
+
+  /* ---------------- Grid ---------------- */
+  .token-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));
+    gap:22px;
+    perspective:1400px;
+  }
+  .empty-state{
+    grid-column:1/-1;
+    text-align:center;color:var(--muted);
+    padding:60px 20px;font-size:14px;
+  }
+
+  /* ---------------- Card ---------------- */
+  .card-float{
+    animation:floatY 6s ease-in-out infinite;
+  }
+  .card-float:nth-child(3n){animation-duration:7.2s;}
+  .card-float:nth-child(3n+1){animation-duration:5.4s;animation-delay:-1.2s;}
+  .card-float:nth-child(3n+2){animation-duration:6.6s;animation-delay:-2.4s;}
+  @keyframes floatY{
+    0%,100%{transform:translateY(0px);}
+    50%{transform:translateY(-6px);}
+  }
+
+  .token-card{
+    position:relative;
+    background:var(--card);
+    border:1px solid var(--card-border);
+    border-radius:22px;
+    padding:22px;
+    backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+    box-shadow:0 12px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+    transform-style:preserve-3d;
+    transition:transform .12s ease-out, box-shadow .2s ease;
+    will-change:transform;
+    display:flex;flex-direction:column;gap:16px;
+  }
+  .token-card:hover{box-shadow:0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);}
+
+  .token-card.entering{animation:cardIn .42s cubic-bezier(.2,.9,.25,1.15);}
+  @keyframes cardIn{
+    0%{opacity:0;transform:translateY(26px) scale(.8);}
+    60%{opacity:1;}
+    100%{opacity:1;transform:translateY(0) scale(1);}
+  }
+  .token-card.leaving{
+    animation:cardOut .38s ease forwards;
+    pointer-events:none;
+  }
+  @keyframes cardOut{
+    0%{opacity:1;transform:scale(1) rotate(0deg);}
+    100%{opacity:0;transform:scale(.75) rotate(-8deg);}
+  }
+
+  .card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .icon-badge{
+    width:44px;height:44px;border-radius:13px;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:15px;color:#fff;
+    box-shadow:0 6px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.25);
+    flex-shrink:0;
+  }
+  .card-name-wrap{flex:1;min-width:0;}
+  .card-name{
+    font-size:15px;font-weight:600;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    cursor:text;
+  }
+  .card-name-input{
+    width:100%;background:rgba(255,255,255,0.08);border:1px solid var(--accent);
+    border-radius:8px;color:var(--text);font-size:15px;font-weight:600;padding:4px 8px;outline:none;
+  }
+  .delete-btn{
+    background:transparent;border:none;color:var(--muted);cursor:pointer;
+    width:28px;height:28px;border-radius:8px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:16px;
+    transition:background .15s ease, color .15s ease;
+  }
+  .delete-btn:hover{background:rgba(255,80,80,0.14);color:#ff8080;}
+
+  .amount-row{display:flex;align-items:baseline;gap:6px;}
+  .amount-value{
+    font-size:32px;font-weight:700;letter-spacing:-0.02em;
+    cursor:text;
+  }
+  .amount-value.pulse{animation:amtPulse .45s ease;}
+  @keyframes amtPulse{
+    0%{transform:scale(1);}
+    40%{transform:scale(1.14);text-shadow:0 0 20px rgba(255,215,0,0.9);color:var(--gold);}
+    100%{transform:scale(1);text-shadow:0 0 0 rgba(255,215,0,0);}
+  }
+  .amount-input{
+    width:100%;background:rgba(255,255,255,0.08);border:1px solid var(--accent);
+    border-radius:8px;color:var(--text);font-size:26px;font-weight:700;padding:4px 8px;outline:none;
+  }
+  .amount-unit{font-size:12px;color:var(--muted);}
+
+  .card-controls{display:flex;gap:10px;}
+  .step-btn{
+    flex:1;
+    background:rgba(255,255,255,0.06);
+    border:1px solid var(--card-border);
+    border-radius:12px;
+    color:var(--text);
+    font-size:18px;font-weight:600;
+    padding:9px 0;
+    cursor:pointer;
+    transition:background .15s ease, transform .12s ease, border-color .15s ease;
+  }
+  .step-btn:active{transform:scale(0.92);}
+  .step-btn.plus:hover{background:rgba(255,215,0,0.16);border-color:rgba(255,215,0,0.4);color:var(--gold);}
+  .step-btn.minus:hover{background:rgba(79,157,255,0.14);border-color:rgba(79,157,255,0.4);color:var(--accent);}
+
+  .sheen{
+    position:absolute;inset:0;border-radius:22px;pointer-events:none;
+    background:radial-gradient(220px circle at var(--px,50%) var(--py,50%), rgba(255,255,255,0.10), transparent 60%);
+    opacity:0;transition:opacity .25s ease;
+  }
+  .token-card:hover .sheen{opacity:1;}
+
+  @media (max-width:640px){
+    .app-title{font-size:32px;}
+    .search-input{width:220px;}
+    .token-grid{grid-template-columns:repeat(auto-fill, minmax(160px,1fr));gap:14px;}
+    .token-card{padding:16px;border-radius:18px;}
+    .amount-value{font-size:26px;}
+  }
+
+  ::selection{background:rgba(255,215,0,0.35);}
+  ::-webkit-scrollbar{width:10px;}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.12);border-radius:10px;}
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useRef, useEffect, useMemo, useCallback, memo } = React;
+
+/* ============================================================
+   COIN PHYSICS ENGINE (vanilla, runs outside React render cycle)
+   ============================================================ */
+class CoinEngine {
+  constructor(backCanvas, frontCanvas){
+    this.back = backCanvas;
+    this.front = frontCanvas;
+    this.bctx = backCanvas.getContext('2d');
+    this.fctx = frontCanvas.getContext('2d');
+    this.particles = [];
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+    this._raf = null;
+    this._loop = this._loop.bind(this);
+  }
+
+  resize(){
+    const w = window.innerWidth, h = window.innerHeight;
+    [this.back, this.front].forEach(c => {
+      c.width = w * this.dpr;
+      c.height = h * this.dpr;
+      c.style.width = w + 'px';
+      c.style.height = h + 'px';
+    });
+    this.bctx.setTransform(this.dpr,0,0,this.dpr,0,0);
+    this.fctx.setTransform(this.dpr,0,0,this.dpr,0,0);
+    this.w = w; this.h = h;
+  }
+
+  start(){
+    if (!this._raf) { this._last = performance.now(); this._raf = requestAnimationFrame(this._loop); }
+  }
+
+  // Explosive burst — bottom-center "bomb" of gold coins
+  burst(originX, originY, count){
+    count = count || (30 + Math.floor(Math.random()*30));
+    for (let i=0;i<count;i++){
+      const angle = (-Math.PI/2) + (Math.random()-0.5) * Math.PI * 0.85; // mostly upward, wide scatter
+      const speed = 5.5 + Math.random()*7.5;
+      this.particles.push({
+        type:'coin',
+        x: originX + (Math.random()-0.5)*40,
+        y: originY,
+        vx: Math.cos(angle)*speed,
+        vy: Math.sin(angle)*speed,
+        rot: Math.random()*Math.PI*2,
+        rotSpeed: (Math.random()-0.5)*0.5,
+        size: 7 + Math.random()*6,
+        life: 0,
+        maxLife: 1500 + Math.random()*1000,
+        layer: Math.random() < 0.35 ? 'back' : 'front',
+        bounced: false,
+        opacity: 1
+      });
+    }
+    this.start();
+  }
+
+  // Subtle falling faded coins for decrease action
+  fall(originX, originY, count){
+    count = count || (4 + Math.floor(Math.random()*4));
+    for (let i=0;i<count;i++){
+      this.particles.push({
+        type:'coin',
+        x: originX + (Math.random()-0.5)*60,
+        y: originY - Math.random()*10,
+        vx: (Math.random()-0.5)*1.4,
+        vy: 0.6 + Math.random()*1.2,
+        rot: Math.random()*Math.PI*2,
+        rotSpeed: (Math.random()-0.5)*0.25,
+        size: 5 + Math.random()*4,
+        life: 0,
+        maxLife: 550 + Math.random()*220,
+        layer: 'front',
+        bounced: true,
+        opacity: 0.55,
+        fadeOut: true
+      });
+    }
+    for (let i=0;i<6;i++){
+      this.particles.push({
+        type:'dust',
+        x: originX + (Math.random()-0.5)*50,
+        y: originY + (Math.random()-0.5)*20,
+        vx: (Math.random()-0.5)*0.6,
+        vy: 0.3 + Math.random()*0.6,
+        size: 1.5 + Math.random()*2,
+        life: 0,
+        maxLife: 400 + Math.random()*200,
+        layer: 'front',
+        opacity: 0.5
+      });
+    }
+    this.start();
+  }
+
+  // Gentle sparkle burst for "add token"
+  sparkle(originX, originY){
+    for (let i=0;i<16;i++){
+      const angle = Math.random()*Math.PI*2;
+      const speed = 1 + Math.random()*2.4;
+      this.particles.push({
+        type:'sparkle',
+        x: originX, y: originY,
+        vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed,
+        size: 1.5 + Math.random()*2.2,
+        life:0, maxLife: 500 + Math.random()*300,
+        layer:'front', opacity:1
+      });
+    }
+    this.start();
+  }
+
+  _loop(now){
+    const dt = Math.min(now - this._last, 40);
+    this._last = now;
+
+    this.bctx.clearRect(0,0,this.w,this.h);
+    this.fctx.clearRect(0,0,this.w,this.h);
+
+    const gravity = 0.018;
+    const alive = [];
+    for (const p of this.particles){
+      p.life += dt;
+      const t = p.life / p.maxLife;
+      if (t >= 1) continue;
+
+      if (p.type === 'coin'){
+        p.vy += gravity * dt;
+        p.x += p.vx * (dt/16.6);
+        p.y += p.vy * (dt/16.6);
+        p.rot += p.rotSpeed * (dt/16.6);
+        // gentle floor bounce for burst coins
+        if (!p.bounced && p.vy > 0 && p.y > this.h*0.86){
+          p.vy *= -0.35; p.bounced = true;
+        }
+        p.opacity = p.fadeOut ? (1 - t) : (t < 0.75 ? 1 : 1 - (t-0.75)/0.25);
+        this._drawCoin(p);
+      } else if (p.type === 'dust'){
+        p.x += p.vx * (dt/16.6);
+        p.y += p.vy * (dt/16.6);
+        p.opacity = (1-t) * 0.5;
+        const ctx = p.layer==='back' ? this.bctx : this.fctx;
+        ctx.save();
+        ctx.globalAlpha = Math.max(p.opacity,0);
+        ctx.fillStyle = '#cfd6e6';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size*(1-t*0.5), 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      } else if (p.type === 'sparkle'){
+        p.x += p.vx * (dt/16.6);
+        p.y += p.vy * (dt/16.6);
+        p.vx *= 0.94; p.vy *= 0.94;
+        p.opacity = 1-t;
+        const ctx = this.fctx;
+        ctx.save();
+        ctx.globalAlpha = Math.max(p.opacity,0);
+        ctx.fillStyle = Math.random()<0.5 ? '#FFD700' : '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      }
+      alive.push(p);
+    }
+    this.particles = alive;
+
+    if (this.particles.length > 0){
+      this._raf = requestAnimationFrame(this._loop);
+    } else {
+      this._raf = null;
+    }
+  }
+
+  _drawCoin(p){
+    const ctx = p.layer === 'back' ? this.bctx : this.fctx;
+    const squash = Math.max(Math.abs(Math.cos(p.rot)), 0.18);
+    ctx.save();
+    ctx.globalAlpha = Math.max(p.opacity, 0);
+    ctx.translate(p.x, p.y);
+    ctx.scale(squash, 1);
+    const grad = ctx.createRadialGradient(-p.size*0.3, -p.size*0.3, 1, 0, 0, p.size);
+    grad.addColorStop(0, '#FFF6C8');
+    grad.addColorStop(0.35, '#FFD700');
+    grad.addColorStop(1, '#B8860B');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(0,0,p.size,0,Math.PI*2);
+    ctx.fill();
+    ctx.lineWidth = Math.max(p.size*0.12, 0.6);
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function hashHue(str){
+  let h = 0;
+  for (let i=0;i<str.length;i++) h = (h*31 + str.charCodeAt(i)) % 360;
+  return h;
+}
+function initials(name){
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0,2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
+
+function useCountUp(value, duration=550){
+  const [display, setDisplay] = useState(value);
+  const [pulsing, setPulsing] = useState(false);
+  const prevRef = useRef(value);
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    const from = prevRef.current;
+    const to = value;
+    if (from === to){ setDisplay(to); return; }
+    const start = performance.now();
+    cancelAnimationFrame(rafRef.current);
+    const tick = (now) => {
+      const t = Math.min((now-start)/duration, 1);
+      const eased = easeOutCubic(t);
+      setDisplay(Math.round(from + (to-from)*eased));
+      if (t < 1){ rafRef.current = requestAnimationFrame(tick); }
+      else { prevRef.current = to; }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    setPulsing(true);
+    const pt = setTimeout(() => setPulsing(false), 450);
+    return () => { cancelAnimationFrame(rafRef.current); clearTimeout(pt); };
+  }, [value]);
+
+  return [display, pulsing];
+}
+
+/* ============================================================
+   BACKGROUND PARTICLES (ambient dots)
+   ============================================================ */
+function ParticleField(){
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let w, h, dots;
+
+    function setup(){
+      w = window.innerWidth; h = window.innerHeight;
+      canvas.width = w*dpr; canvas.height = h*dpr;
+      canvas.style.width = w+'px'; canvas.style.height = h+'px';
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      const count = Math.min(70, Math.floor((w*h)/22000));
+      dots = Array.from({length:count}, () => ({
+        x: Math.random()*w, y: Math.random()*h,
+        r: Math.random()*1.6 + 0.4,
+        vx: (Math.random()-0.5)*0.15,
+        vy: (Math.random()-0.5)*0.15,
+        o: Math.random()*0.5 + 0.15
+      }));
+    }
+    setup();
+    window.addEventListener('resize', setup);
+
+    let raf;
+    function loop(){
+      ctx.clearRect(0,0,w,h);
+      for (const d of dots){
+        d.x += d.vx; d.y += d.vy;
+        if (d.x < 0) d.x = w; if (d.x > w) d.x = 0;
+        if (d.y < 0) d.y = h; if (d.y > h) d.y = 0;
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(255,255,255,${d.o})`;
+        ctx.arc(d.x, d.y, d.r, 0, Math.PI*2);
+        ctx.fill();
+      }
+      raf = requestAnimationFrame(loop);
+    }
+    loop();
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', setup); };
+  }, []);
+  return <canvas ref={canvasRef} className="particles" />;
+}
+
+/* ============================================================
+   TOKEN CARD
+   ============================================================ */
+const TokenCard = memo(function TokenCard({ token, onIncrement, onDecrement, onDelete, onRename, onSetAmount, entering, leaving }){
+  const cardRef = useRef(null);
+  const [editingName, setEditingName] = useState(false);
+  const [editingAmount, setEditingAmount] = useState(false);
+  const [nameDraft, setNameDraft] = useState(token.name);
+  const [amountDraft, setAmountDraft] = useState(String(token.amount));
+  const [displayAmount, pulsing] = useCountUp(token.amount);
+
+  const hue = useMemo(() => hashHue(token.name || 'token'), [token.name]);
+
+  const handleMouseMove = useCallback((e) => {
+    const el = cardRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width;
+    const py = (e.clientY - rect.top) / rect.height;
+    const rotY = (px - 0.5) * 16;
+    const rotX = (0.5 - py) * 16;
+    el.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg) translateZ(6px)`;
+    el.style.setProperty('--px', `${px*100}%`);
+    el.style.setProperty('--py', `${py*100}%`);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    el.style.transform = 'rotateX(0deg) rotateY(0deg) translateZ(0px)';
+  }, []);
+
+  const commitName = () => {
+    const v = nameDraft.trim();
+    if (v) onRename(token.id, v);
+    setEditingName(false);
+  };
+  const commitAmount = () => {
+    const v = parseInt(amountDraft, 10);
+    if (!isNaN(v) && v >= 0){
+      const rect = cardRef.current.getBoundingClientRect();
+      onSetAmount(token.id, v, rect);
+    }
+    setEditingAmount(false);
+  };
+
+  const handlePlus = (e) => {
+    onIncrement(token.id);
+  };
+  const handleMinus = (e) => {
+    const rect = cardRef.current.getBoundingClientRect();
+    onDecrement(token.id, rect);
+  };
+
+  let cls = 'card-float';
+  let innerCls = 'token-card';
+  if (entering) innerCls += ' entering';
+  if (leaving) innerCls += ' leaving';
+
+  return (
+    <div className={cls}>
+      <div
+        ref={cardRef}
+        className={innerCls}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
+        <div className="sheen"></div>
+
+        <div className="card-top">
+          <div
+            className="icon-badge"
+            style={{ background: `linear-gradient(135deg, hsl(${hue},70%,55%), hsl(${(hue+40)%360},70%,42%))` }}
+          >
+            {initials(token.name)}
+          </div>
+          <div className="card-name-wrap">
+            {editingName ? (
+              <input
+                className="card-name-input"
+                autoFocus
+                value={nameDraft}
+                onChange={e => setNameDraft(e.target.value)}
+                onBlur={commitName}
+                onKeyDown={e => { if (e.key==='Enter') commitName(); if (e.key==='Escape'){ setNameDraft(token.name); setEditingName(false);} }}
+              />
+            ) : (
+              <div className="card-name" title={token.name} onDoubleClick={() => setEditingName(true)}>
+                {token.name}
+              </div>
+            )}
+          </div>
+          <button className="delete-btn" onClick={() => onDelete(token.id)} aria-label="Delete token">✕</button>
+        </div>
+
+        <div className="amount-row">
+          {editingAmount ? (
+            <input
+              type="number"
+              className="amount-input"
+              autoFocus
+              value={amountDraft}
+              onChange={e => setAmountDraft(e.target.value)}
+              onBlur={commitAmount}
+              onKeyDown={e => { if (e.key==='Enter') commitAmount(); if (e.key==='Escape'){ setAmountDraft(String(token.amount)); setEditingAmount(false);} }}
+            />
+          ) : (
+            <div
+              className={`amount-value ${pulsing ? 'pulse' : ''}`}
+              onDoubleClick={() => { setAmountDraft(String(token.amount)); setEditingAmount(true); }}
+              title="Double-click to type an amount"
+            >
+              {displayAmount.toLocaleString()}
+            </div>
+          )}
+          <span className="amount-unit">tokens</span>
+        </div>
+
+        <div className="card-controls">
+          <button className="step-btn minus" onClick={handleMinus} aria-label="Decrease">−</button>
+          <button className="step-btn plus" onClick={handlePlus} aria-label="Increase">+</button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+/* ============================================================
+   APP
+   ============================================================ */
+function App(){
+  const [tokens, setTokens] = useState(() => ([
+    { id: 'gold',    name: 'Gold Coins', amount: 1240 },
+    { id: 'gems',    name: 'Gems',       amount: 86   },
+    { id: 'energy',  name: 'Energy',     amount: 12   },
+    { id: 'diamond', name: 'Diamonds',   amount: 305  },
+  ]));
+  const [search, setSearch] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newAmount, setNewAmount] = useState('0');
+  const [enteringIds, setEnteringIds] = useState(() => new Set());
+  const [leavingIds, setLeavingIds] = useState(() => new Set());
+
+  const backCanvasRef = useRef(null);
+  const frontCanvasRef = useRef(null);
+  const engineRef = useRef(null);
+  const addBtnRef = useRef(null);
+
+  useEffect(() => {
+    engineRef.current = new CoinEngine(backCanvasRef.current, frontCanvasRef.current);
+  }, []);
+
+  // ambient mouse-driven lighting variable
+  useEffect(() => {
+    let raf = null, mx = 50, my = 50;
+    const handler = (e) => {
+      mx = (e.clientX / window.innerWidth) * 100;
+      my = (e.clientY / window.innerHeight) * 100;
+      if (!raf){
+        raf = requestAnimationFrame(() => {
+          document.documentElement.style.setProperty('--mx', mx + '%');
+          document.documentElement.style.setProperty('--my', my + '%');
+          raf = null;
+        });
+      }
+    };
+    window.addEventListener('mousemove', handler);
+    return () => window.removeEventListener('mousemove', handler);
+  }, []);
+
+  const totalAmount = useMemo(() => tokens.reduce((s,t) => s+t.amount, 0), [tokens]);
+  const [displayTotal, totalPulsing] = useCountUp(totalAmount);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return tokens;
+    return tokens.filter(t => t.name.toLowerCase().includes(q));
+  }, [tokens, search]);
+
+  const burstBottomCenter = useCallback((count) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.burst(window.innerWidth/2, window.innerHeight - 20, count);
+  }, []);
+
+  const handleIncrement = useCallback((id) => {
+    setTokens(prev => prev.map(t => t.id === id ? { ...t, amount: t.amount + 1 } : t));
+    burstBottomCenter();
+  }, [burstBottomCenter]);
+
+  const handleDecrement = useCallback((id, rect) => {
+    setTokens(prev => prev.map(t => t.id === id ? { ...t, amount: Math.max(0, t.amount - 1) } : t));
+    const engine = engineRef.current;
+    if (engine && rect){
+      engine.fall(rect.left + rect.width/2, rect.top + rect.height * 0.55);
+    }
+  }, []);
+
+  const handleSetAmount = useCallback((id, value, rect) => {
+    setTokens(prev => {
+      const cur = prev.find(t => t.id === id);
+      if (cur){
+        if (value > cur.amount) burstBottomCenter();
+        else if (value < cur.amount && engineRef.current && rect){
+          engineRef.current.fall(rect.left + rect.width/2, rect.top + rect.height*0.55);
+        }
+      }
+      return prev.map(t => t.id === id ? { ...t, amount: value } : t);
+    });
+  }, [burstBottomCenter]);
+
+  const handleRename = useCallback((id, name) => {
+    setTokens(prev => prev.map(t => t.id === id ? { ...t, name } : t));
+  }, []);
+
+  const handleDelete = useCallback((id) => {
+    setLeavingIds(prev => new Set(prev).add(id));
+    setTimeout(() => {
+      setTokens(prev => prev.filter(t => t.id !== id));
+      setLeavingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+    }, 380);
+  }, []);
+
+  const handleAddToken = () => {
+    const name = newName.trim();
+    if (!name) return;
+    const amount = Math.max(0, parseInt(newAmount, 10) || 0);
+    const id = `${name.toLowerCase().replace(/\s+/g,'-')}-${Date.now()}`;
+    setTokens(prev => [...prev, { id, name, amount }]);
+    setEnteringIds(prev => new Set(prev).add(id));
+    setTimeout(() => {
+      setEnteringIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+    }, 450);
+
+    const engine = engineRef.current;
+    if (engine && addBtnRef.current){
+      const rect = addBtnRef.current.getBoundingClientRect();
+      engine.sparkle(rect.left + rect.width/2, rect.top + rect.height/2);
+    }
+
+    setNewName('');
+    setNewAmount('0');
+    setShowAdd(false);
+  };
+
+  return (
+    <React.Fragment>
+      <div className="bg-mesh"></div>
+      <div className="orb orb1"></div>
+      <div className="orb orb2"></div>
+      <div className="orb orb3"></div>
+      <ParticleField />
+      <canvas ref={backCanvasRef} className="coin-back"></canvas>
+      <canvas ref={frontCanvasRef} className="coin-front"></canvas>
+
+      <div className="app-shell">
+        <header className="app-header">
+          <div className="eyebrow">Vault</div>
+          <h1 className="app-title">Token Management</h1>
+          <p className="app-sub">Track balances, mint new tokens, and watch every gain land with a little celebration.</p>
+
+          <div className="totals-row">
+            <div className="stat-pill">
+              <div className="stat-label">Total Tokens</div>
+              <div className={`stat-value ${totalPulsing ? 'pulse' : ''}`}>{displayTotal.toLocaleString()}</div>
+            </div>
+            <div className="stat-pill">
+              <div className="stat-label">Token Types</div>
+              <div className="stat-value">{tokens.length}</div>
+            </div>
+          </div>
+        </header>
+
+        <div className="toolbar">
+          <div className="search-wrap">
+            <span className="search-icon">⌕</span>
+            <input
+              className="search-input"
+              placeholder="Search tokens…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <button ref={addBtnRef} className="btn btn-primary" onClick={() => setShowAdd(s => !s)}>
+            + Add Token
+          </button>
+        </div>
+
+        {showAdd && (
+          <div className="add-panel">
+            <div className="add-panel-row">
+              <input
+                placeholder="Token name"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                autoFocus
+                style={{flex:2}}
+              />
+              <input
+                type="number"
+                placeholder="Starting amount"
+                value={newAmount}
+                onChange={e => setNewAmount(e.target.value)}
+                style={{flex:1}}
+              />
+            </div>
+            <div className="add-panel-actions">
+              <button className="btn btn-ghost" onClick={() => setShowAdd(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleAddToken}>Create</button>
+            </div>
+          </div>
+        )}
+
+        <div className="token-grid">
+          {filtered.length === 0 && (
+            <div className="empty-state">No tokens match your search.</div>
+          )}
+          {filtered.map(token => (
+            <TokenCard
+              key={token.id}
+              token={token}
+              onIncrement={handleIncrement}
+              onDecrement={handleDecrement}
+              onDelete={handleDelete}
+              onRename={handleRename}
+              onSetAmount={handleSetAmount}
+              entering={enteringIds.has(token.id)}
+              leaving={leavingIds.has(token.id)}
+            />
+          ))}
+        </div>
+      </div>
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
